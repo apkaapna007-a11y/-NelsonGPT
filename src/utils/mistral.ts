@@ -12,27 +12,28 @@ if (!MISTRAL_API_KEY) {
 /**
  * Create a system prompt for Nelson-GPT based on mode and context
  */
-export function createSystemPrompt(mode: 'academic' | 'clinical', context: string): string {
+export function createSystemPrompt(
+  options: { includeReferences: boolean; clinicalFocus: boolean }
+): string {
   const basePrompt = `You are Nelson-GPT, a pediatric knowledge assistant based on the Nelson Textbook of Pediatrics. You provide evidence-based answers to healthcare professionals.
 
 IMPORTANT GUIDELINES:
-- Always cite sources using the format [Nelson Ch. X] where X is the chapter number
 - Provide accurate, evidence-based medical information
 - Use clear, professional medical language appropriate for healthcare professionals
 - If uncertain about any information, acknowledge limitations
 - Never provide specific treatment recommendations without proper context
 - Always recommend consulting with experienced colleagues for patient care decisions
-
-Context from Nelson Textbook of Pediatrics:
-${context}
-
 `;
 
-  if (mode === 'clinical') {
-    return basePrompt + `CLINICAL MODE: Focus on practical clinical applications, differential diagnoses, treatment approaches, and bedside management. Prioritize actionable information for immediate clinical use.`;
-  } else {
-    return basePrompt + `ACADEMIC MODE: Provide comprehensive explanations with detailed pathophysiology, epidemiology, and theoretical background. Include educational context and learning objectives.`;
-  }
+  const citationInstruction = options.includeReferences
+    ? '- Always cite sources using the format [Nelson Ch. X] where X is the chapter number'
+    : '- Do not include citations in your response.';
+
+  const clinicalFocusInstruction = options.clinicalFocus
+    ? 'CLINICAL MODE: Focus on practical clinical applications, differential diagnoses, treatment approaches, and bedside management. Prioritize actionable information for immediate clinical use.'
+    : 'ACADEMIC MODE: Provide comprehensive explanations with detailed pathophysiology, epidemiology, and theoretical background. Include educational context and learning objectives.';
+
+  return `${basePrompt}\n${citationInstruction}\n\n${clinicalFocusInstruction}`;
 }
 
 /**

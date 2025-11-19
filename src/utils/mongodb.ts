@@ -3,26 +3,34 @@
  * Provides vector similarity search for medical embeddings
  */
 
-import { EmbeddingResult, Citation } from '../types';
-
 // MongoDB Atlas Data API configuration
 const MONGODB_DATA_API_URL = import.meta.env.VITE_MONGODB_DATA_API_URL;
 const MONGODB_API_KEY = import.meta.env.VITE_MONGODB_API_KEY;
 const MONGODB_CLUSTER = import.meta.env.VITE_MONGODB_CLUSTER || 'peadknowledgebase';
 const MONGODB_DATABASE = import.meta.env.VITE_MONGODB_DATABASE || 'supabase_migration';
 
-interface MongoDBVectorSearchParams {
-  query_vector: number[];
-  collection: string;
-  index: string;
-  limit?: number;
-  filters?: Record<string, any>;
-}
-
-interface MongoDBSearchResult {
+export interface MongoDBSearchResult {
   _id: string;
   score: number;
-  [key: string]: any;
+  content: string;
+  metadata: Record<string, unknown>;
+  similarity: number;
+  source: any;
+  chapter: string;
+  page_number: number;
+  section: string;
+}
+
+export interface Citation {
+  id: string;
+  source: string;
+  page: number;
+  section: string;
+  confidence: 'high' | 'medium' | 'low';
+  excerpt: string;
+  chapter: string;
+  pageRange: string;
+  title: string;
 }
 
 /**
@@ -38,7 +46,7 @@ export async function vectorSearch(
     minConfidenceScore?: number;
     ageGroups?: string[];
   } = {}
-): Promise<EmbeddingResult[]> {
+): Promise<MongoDBSearchResult[]> {
   const {
     collection = 'medical_embeddings',
     index = 'vector_index_medical',
@@ -121,17 +129,21 @@ export async function vectorSearch(
       throw new Error('No documents returned from MongoDB Vector Search');
     }
 
-    // Transform MongoDB results to EmbeddingResult format
-    return data.documents.map((doc: MongoDBSearchResult): EmbeddingResult => ({
-      id: doc._id,
+    // Transform MongoDB results to MongoDBSearchResult format
+    return data.documents.map((doc: any): MongoDBSearchResult => ({
+      _id: doc._id,
+      score: doc.score || 0,
       content: doc.content || '',
       metadata: doc.metadata || {},
       similarity: doc.score || 0,
       source: {
         chapter: doc.chapter || 'Unknown',
         page: doc.page_number || 0,
-        section: doc.section || 'Unknown'
-      }
+        section: doc.section || 'Unknown',
+      },
+      chapter: doc.chapter || 'Unknown',
+      page_number: doc.page_number || 0,
+      section: doc.section || 'Unknown',
     }));
 
   } catch (error) {
@@ -288,14 +300,17 @@ export async function healthCheck(): Promise<boolean> {
 /**
  * Extract citations from MongoDB search results
  */
-export function extractCitationsFromResults(results: EmbeddingResult[]): Citation[] {
+export function extractCitationsFromResults(results: MongoDBSearchResult[]): Citation[] {
   return results.map((result, index) => ({
     id: `citation-${index}`,
-    source: `Nelson Ch. ${result.source?.chapter || 'Unknown'}`,
-    page: result.source?.page || 0,
-    section: result.source?.section || 'Unknown',
-    confidence: result.similarity || 0,
-    excerpt: result.content.substring(0, 200) + '...'
+    source: `Nelson Ch. ${result.chapter || 'Unknown'}`,
+    page: result.page_number || 0,
+    section: result.section || 'Unknown',
+    confidence: result.similarity > 0.9 ? 'high' : result.similarity > 0.8 ? 'medium' : 'low',
+    excerpt: result.content ? result.content.substring(0, 200) + '...' : '',
+    chapter: result.chapter || 'Unknown',
+    pageRange: result.page_number ? `${result.page_number}` : 'N/A',
+    title: result.metadata?.title as string || 'Unknown',
   }));
 }
 
