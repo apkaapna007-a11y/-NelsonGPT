@@ -7,7 +7,6 @@ import { generateEmbedding } from './embeddings';
 import { streamChatCompletion, createSystemPrompt } from './mistral';
 import { vectorSearch as supabaseVectorSearch } from './supabase';
 import { vectorSearch as mongoVectorSearch, searchDrugDosages, extractCitationsFromResults } from './mongodb';
-import { parseCitations } from './markdown';
 import { EmbeddingResult, Citation, ChatMode } from '../types';
 
 export interface RAGConfig {
@@ -80,25 +79,21 @@ export async function* ragPipeline(
     const context = assembleContext(filteredResults, ragConfig);
     
     // Step 6: Generate system prompt
-    const systemPrompt = createSystemPrompt(mode, {
+    const systemPrompt = createSystemPrompt({
       includeReferences: ragConfig.includeReferences,
-      clinicalFocus: ragConfig.clinicalFocus
+      clinicalFocus: ragConfig.clinicalFocus,
     });
 
     // Step 7: Stream LLM response
     yield { type: 'chunk', data: 'Generating response...' };
     
-    const prompt = `${systemPrompt}
-
-Context from Nelson Textbook of Pediatrics:
-${context}
-
-User Question: ${query}
-
-Please provide a comprehensive, evidence-based answer with appropriate citations.`;
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Context from Nelson Textbook of Pediatrics:\n${context}\n\nUser Question: ${query}\n\nPlease provide a comprehensive, evidence-based answer with appropriate citations.` }
+    ];
 
     // Stream the response
-    for await (const chunk of streamChatCompletion(prompt)) {
+    for await (const chunk of streamChatCompletion(messages)) {
       yield { type: 'chunk', data: chunk };
     }
 
@@ -117,6 +112,24 @@ Please provide a comprehensive, evidence-based answer with appropriate citations
 /**
  * Perform vector search using configured provider
  */
+function toEmbeddingResult(searchResult: any): EmbeddingResult {
+  return {
+    embedding: [],
+    text: searchResult.content,
+    metadata: {
+      chapter: searchResult.chapter,
+      page: searchResult.page_number,
+      section: searchResult.section,
+      title: searchResult.metadata?.title || '',
+    },
+    // @ts-ignore
+    similarity: searchResult.similarity,
+    // @ts-ignore
+    content: searchResult.content,
+    // @ts-ignore
+    source: searchResult.source,
+  };
+}
 async function performVectorSearch(
   queryEmbedding: number[],
   config: RAGConfig,
@@ -131,9 +144,11 @@ async function performVectorSearch(
   try {
     // Try primary vector provider
     if (config.vectorProvider === 'mongodb') {
-      return await mongoVectorSearch(queryEmbedding, searchOptions);
+      const mongoResults = await mongoVectorSearch(queryEmbedding, searchOptions);
+      return mongoResults.map(toEmbeddingResult);
     } else {
-      return await supabaseVectorSearch(queryEmbedding, searchOptions);
+      const supabaseResults = await supabaseVectorSearch(queryEmbedding, searchOptions as any);
+      return supabaseResults.map(toEmbeddingResult);
     }
   } catch (error) {
     console.warn(`Primary vector provider (${config.vectorProvider}) failed, trying fallback:`, error);
@@ -141,9 +156,11 @@ async function performVectorSearch(
     // Fallback to alternative provider
     try {
       if (config.vectorProvider === 'mongodb') {
-        return await supabaseVectorSearch(queryEmbedding, searchOptions);
+        const supabaseResults = await supabaseVectorSearch(queryEmbedding, searchOptions as any);
+        return supabaseResults.map(toEmbeddingResult);
       } else {
-        return await mongoVectorSearch(queryEmbedding, searchOptions);
+        const mongoResults = await mongoVectorSearch(queryEmbedding, searchOptions);
+        return mongoResults.map(toEmbeddingResult);
       }
     } catch (fallbackError) {
       console.error('Both vector providers failed:', fallbackError);
@@ -160,8 +177,8 @@ function filterSearchResults(
   config: RAGConfig
 ): EmbeddingResult[] {
   return results
-    .filter(result => result.similarity >= config.similarityThreshold)
-    .sort((a, b) => b.similarity - a.similarity)
+    .filter(result => (result as any).similarity >= config.similarityThreshold)
+    .sort((a, b) => (b as any).similarity - (a as any).similarity)
     .slice(0, config.maxCitations);
 }
 
@@ -176,7 +193,7 @@ function extractCitations(
     return [];
   }
 
-  return extractCitationsFromResults(results).slice(0, config.maxCitations);
+  return extractCitationsFromResults(results as any).slice(0, config.maxCitations);
 }
 
 /**
@@ -190,7 +207,9 @@ function assembleContext(
   let currentLength = 0;
 
   for (const result of results) {
-    const resultText = `[Source: Nelson Ch. ${result.source?.chapter || 'Unknown'}]\n${result.content}\n\n`;
+    const source = (result as any).source;
+    const content = (result as any).content || result.text;
+    const resultText = `[Source: Nelson Ch. ${source?.chapter || 'Unknown'}]\n${content}\n\n`;
     
     if (currentLength + resultText.length > config.maxContextLength) {
       break;
