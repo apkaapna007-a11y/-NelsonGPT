@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore, usePreferences } from '../store/chatStore';
 import { UserPreferences, Theme, FontSize, ColorPalette } from '../types';
@@ -26,6 +26,40 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
     { id: 'gray' as ColorPalette, name: 'Gray', color: '#6B7280' },
   ];
 
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen && panelRef.current) {
+      const first = panelRef.current.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    }
+  }, [isOpen]);
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      onClose();
+    }
+
+    if (e.key === 'Tab' && panelRef.current) {
+      const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (!first || !last) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -41,6 +75,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
 
           {/* Settings Panel */}
           <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-title"
+            onKeyDown={onKeyDown}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -53,12 +92,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                 <button
                   onClick={onClose}
                   className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                  aria-label="Close settings"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                     <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>
-                <h1 className="text-xl font-bold text-medical-charcoal">Settings</h1>
+                <h1 id="settings-title" className="text-xl font-bold text-medical-charcoal">Settings</h1>
                 <div className="w-9" /> {/* Spacer */}
               </div>
             </div>
@@ -84,6 +124,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                             ? 'border-primary-500 bg-primary-50'
                             : 'border-neutral-200 hover:border-neutral-300'
                         }`}
+                        aria-pressed={preferences.theme === theme}
+                        aria-label={`Select ${theme} theme`}
                       >
                         <div className="flex flex-col items-center space-y-2">
                           {theme === 'light' && (
@@ -126,6 +168,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                         const sizes: FontSize[] = ['small', 'medium', 'large'];
                         handlePreferenceChange('fontSize', sizes[parseInt(e.target.value)]);
                       }}
+                      aria-label="Font size"
                       className="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer slider"
                     />
                     <div className="flex justify-between text-xs text-neutral-500 mt-2">
@@ -156,6 +199,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                             : 'border-neutral-200 hover:border-neutral-300'
                         }`}
                         style={{ backgroundColor: palette.color }}
+                        aria-label={`Select ${palette.name} color palette`}
+                        aria-pressed={preferences.colorPalette === palette.id}
                       />
                     ))}
                   </div>
@@ -181,6 +226,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                         preferences.detailedResponses ? 'bg-primary-500' : 'bg-neutral-300'
                       }`}
+                      role="switch"
+                      aria-checked={preferences.detailedResponses}
+                      aria-label="Detailed responses"
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -200,6 +248,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                         preferences.includeReferences ? 'bg-primary-500' : 'bg-neutral-300'
                       }`}
+                      role="switch"
+                      aria-checked={preferences.includeReferences}
+                      aria-label="Include references"
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -219,6 +270,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                         preferences.clinicalFocus ? 'bg-primary-500' : 'bg-neutral-300'
                       }`}
+                      role="switch"
+                      aria-checked={preferences.clinicalFocus}
+                      aria-label="Clinical focus"
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
