@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Citation } from '../types';
 
@@ -9,6 +9,40 @@ interface CitationModalProps {
 }
 
 const CitationModal: React.FC<CitationModalProps> = ({ citation, isOpen, onClose }) => {
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      const first = modalRef.current.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    }
+  }, [isOpen]);
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      onClose();
+    }
+
+    if (e.key === 'Tab' && modalRef.current) {
+      const focusables = modalRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (!first || !last) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -24,6 +58,11 @@ const CitationModal: React.FC<CitationModalProps> = ({ citation, isOpen, onClose
 
           {/* Modal */}
           <motion.div
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="citation-title"
+            onKeyDown={onKeyDown}
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -32,10 +71,11 @@ const CitationModal: React.FC<CitationModalProps> = ({ citation, isOpen, onClose
           >
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-neutral-200">
-              <h2 className="text-lg font-semibold text-medical-charcoal">Citation Details</h2>
+              <h2 id="citation-title" className="text-lg font-semibold text-medical-charcoal">Citation Details</h2>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                aria-label="Close citation details"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

@@ -32,6 +32,9 @@ const InstallPrompt: React.FC = () => {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Install Nelson-GPT"
           className="fixed bottom-20 left-4 right-4 bg-white rounded-2xl shadow-2xl border border-neutral-200 p-4 z-40"
         >
           <div className="flex items-start space-x-4">
@@ -75,6 +78,7 @@ const InstallPrompt: React.FC = () => {
             <button
               onClick={handleDismiss}
               className="p-1 hover:bg-neutral-100 rounded-lg transition-colors flex-shrink-0"
+              aria-label="Dismiss install prompt"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-neutral-400">
                 <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

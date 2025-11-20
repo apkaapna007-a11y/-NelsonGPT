@@ -78,6 +78,7 @@ const ChatInterface: React.FC = () => {
           <button
             onClick={() => setCurrentScreen('welcome')}
             className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+            aria-label="Back to welcome"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -88,7 +89,7 @@ const ChatInterface: React.FC = () => {
             {currentChat.title}
           </h1>
           
-          <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors">
+          <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors" aria-label="More options">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="1" stroke="currentColor" strokeWidth="2"/>
               <circle cx="19" cy="12" r="1" stroke="currentColor" strokeWidth="2"/>
