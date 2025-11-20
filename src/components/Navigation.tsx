@@ -78,6 +78,8 @@ const Navigation: React.FC = () => {
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
+      role="navigation"
+      aria-label="Primary"
       className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-neutral-200 safe-area-bottom z-50"
     >
       <div className="flex items-center justify-around px-4 py-2">
@@ -91,6 +93,8 @@ const Navigation: React.FC = () => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => handleNavClick(item.id)}
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
               className={`flex flex-col items-center justify-center min-w-[60px] py-2 px-3 rounded-xl transition-all duration-200 ${
                 isActive
                   ? 'bg-primary-100 text-primary-600'
