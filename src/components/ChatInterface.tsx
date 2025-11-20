@@ -1,10 +1,54 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useChatStore, useCurrentChat } from '../store/chatStore';
+import { useChatStore, useCurrentChat, usePreferences } from '../store/chatStore';
+import { ragPipeline, getRAGConfig } from '@/utils/rag';
 
 const ChatInterface: React.FC = () => {
   const currentChat = useCurrentChat();
-  const { setCurrentScreen } = useChatStore();
+  const preferences = usePreferences();
+  const { setCurrentScreen, addMessage, setLoading } = useChatStore();
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const handleSend = async () => {
+    if (!currentChat || !input.trim() || sending) return;
+
+    const chatId = currentChat.id;
+    const userContent = input.trim();
+
+    setInput('');
+    setSending(true);
+    setLoading(true);
+
+    addMessage(chatId, { role: 'user', content: userContent });
+
+    try {
+      const ragConfig = getRAGConfig({
+        detailedResponses: preferences.detailedResponses,
+        includeReferences: preferences.includeReferences,
+        clinicalFocus: preferences.clinicalFocus,
+        vectorProvider: 'mongodb'
+      });
+
+      let acc = '';
+      let citations: any[] = [];
+
+      for await (const evt of ragPipeline(userContent, currentChat.mode, ragConfig)) {
+        if (evt.type === 'chunk' && typeof evt.data === 'string') {
+          acc += evt.data;
+        } else if (evt.type === 'citations') {
+          citations = evt.data || [];
+        }
+      }
+
+      addMessage(chatId, { role: 'assistant', content: acc, citations });
+    } catch (e) {
+      addMessage(chatId, { role: 'assistant', content: 'Sorry, I could not generate a response.' });
+    } finally {
+      setSending(false);
+      setLoading(false);
+    }
+  };
 
   if (!currentChat) {
     return (
@@ -90,10 +134,19 @@ const ChatInterface: React.FC = () => {
         <div className="flex items-center space-x-3">
           <input
             type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
             placeholder="Type your message..."
+            aria-label="Type your message"
             className="flex-1 px-4 py-3 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
-          <button className="p-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors">
+          <button
+            onClick={handleSend}
+            disabled={sending || !input.trim()}
+            className="p-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Send message"
+          >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>

@@ -5,8 +5,6 @@
 
 import { generateEmbedding } from './embeddings';
 import { streamChatCompletion, createSystemPrompt } from './mistral';
-import { vectorSearch as supabaseVectorSearch } from './supabase';
-import { vectorSearch as mongoVectorSearch, searchDrugDosages, extractCitationsFromResults } from './mongodb';
 import { EmbeddingResult, Citation, ChatMode } from '../types';
 
 export interface RAGConfig {
@@ -113,53 +111,88 @@ export async function* ragPipeline(
  * Perform vector search using configured provider
  */
 function toEmbeddingResult(searchResult: any): EmbeddingResult {
+  // MongoDB result shape
+  if (typeof searchResult.page_number !== 'undefined' || searchResult.source) {
+    return {
+      embedding: [],
+      text: searchResult.content,
+      metadata: {
+        chapter: searchResult.chapter || searchResult.metadata?.chapter || 'Unknown',
+        page: searchResult.page_number || searchResult.metadata?.page || 0,
+        section: searchResult.section || searchResult.metadata?.section || 'Unknown',
+        title: searchResult.metadata?.title || ''
+      },
+      // @ts-ignore - carry similarity for ranking
+      similarity: searchResult.similarity || searchResult.score || 0,
+      // @ts-ignore
+      content: searchResult.content,
+      // @ts-ignore
+      source: searchResult.source || {
+        chapter: searchResult.chapter,
+        page: searchResult.page_number,
+        section: searchResult.section
+      }
+    } as any;
+  }
+
+  // Supabase result shape
   return {
     embedding: [],
     text: searchResult.content,
     metadata: {
-      chapter: searchResult.chapter,
-      page: searchResult.page_number,
-      section: searchResult.section,
-      title: searchResult.metadata?.title || '',
+      chapter: searchResult.metadata?.chapter || 'Unknown',
+      page: parseInt((searchResult.metadata?.pageRange || '0').toString().split('-')[0] || '0', 10) || 0,
+      section: searchResult.metadata?.section || 'Unknown',
+      title: searchResult.metadata?.title || ''
     },
     // @ts-ignore
-    similarity: searchResult.similarity,
+    similarity: searchResult.similarity || 0,
     // @ts-ignore
     content: searchResult.content,
     // @ts-ignore
-    source: searchResult.source,
-  };
+    source: {
+      chapter: searchResult.metadata?.chapter,
+      page: parseInt((searchResult.metadata?.pageRange || '0').toString().split('-')[0] || '0', 10) || 0,
+      section: searchResult.metadata?.section
+    }
+  } as any;
 }
 async function performVectorSearch(
   queryEmbedding: number[],
   config: RAGConfig,
   mode: ChatMode
 ): Promise<EmbeddingResult[]> {
-  const searchOptions = {
-    limit: config.maxCitations * 2, // Search more to filter later
-    medicalSpecialty: mode === 'clinical' ? 'pediatrics' : undefined,
-    minConfidenceScore: config.similarityThreshold
-  };
+  const limit = config.maxCitations * 2;
+  const threshold = config.similarityThreshold;
 
   try {
-    // Try primary vector provider
     if (config.vectorProvider === 'mongodb') {
-      const mongoResults = await mongoVectorSearch(queryEmbedding, searchOptions);
+      const { vectorSearch: mongoVectorSearch } = await import('./mongodb');
+      const mongoResults = await mongoVectorSearch(queryEmbedding, {
+        limit,
+        medicalSpecialty: mode === 'clinical' ? 'pediatrics' : undefined,
+        minConfidenceScore: threshold
+      });
       return mongoResults.map(toEmbeddingResult);
     } else {
-      const supabaseResults = await supabaseVectorSearch(queryEmbedding, searchOptions as any);
+      const { vectorSearch: supabaseVectorSearch } = await import('./supabase');
+      const supabaseResults = await supabaseVectorSearch(queryEmbedding, limit, threshold);
       return supabaseResults.map(toEmbeddingResult);
     }
   } catch (error) {
     console.warn(`Primary vector provider (${config.vectorProvider}) failed, trying fallback:`, error);
-    
-    // Fallback to alternative provider
     try {
       if (config.vectorProvider === 'mongodb') {
-        const supabaseResults = await supabaseVectorSearch(queryEmbedding, searchOptions as any);
+        const { vectorSearch: supabaseVectorSearch } = await import('./supabase');
+        const supabaseResults = await supabaseVectorSearch(queryEmbedding, limit, threshold);
         return supabaseResults.map(toEmbeddingResult);
       } else {
-        const mongoResults = await mongoVectorSearch(queryEmbedding, searchOptions);
+        const { vectorSearch: mongoVectorSearch } = await import('./mongodb');
+        const mongoResults = await mongoVectorSearch(queryEmbedding, {
+          limit,
+          medicalSpecialty: mode === 'clinical' ? 'pediatrics' : undefined,
+          minConfidenceScore: threshold
+        });
         return mongoResults.map(toEmbeddingResult);
       }
     } catch (fallbackError) {
@@ -189,11 +222,23 @@ function extractCitations(
   results: EmbeddingResult[],
   config: RAGConfig
 ): Citation[] {
-  if (!config.includeReferences) {
-    return [];
-  }
+  if (!config.includeReferences) return [];
 
-  return extractCitationsFromResults(results as any).slice(0, config.maxCitations);
+  return results.slice(0, config.maxCitations).map((r, idx) => {
+    const chapter = (r as any).metadata?.chapter || (r as any).source?.chapter || 'Unknown';
+    const page = (r as any).metadata?.page || (r as any).source?.page || 0;
+    const title = (r as any).metadata?.title || 'Unknown';
+    const similarity = (r as any).similarity ?? 0;
+
+    return {
+      id: `citation-${idx}`,
+      chapter: typeof chapter === 'string' && chapter.startsWith('Chapter') ? chapter : `Chapter ${chapter}`,
+      pageRange: page ? String(page) : 'N/A',
+      title,
+      excerpt: (r as any).content ? String((r as any).content).slice(0, 200) + '...' : '',
+      confidence: similarity > 0.9 ? 'high' : similarity > 0.8 ? 'medium' : 'low'
+    } as Citation;
+  });
 }
 
 /**
@@ -207,14 +252,13 @@ function assembleContext(
   let currentLength = 0;
 
   for (const result of results) {
-    const source = (result as any).source;
+    const meta = (result as any).metadata || {};
     const content = (result as any).content || result.text;
-    const resultText = `[Source: Nelson Ch. ${source?.chapter || 'Unknown'}]\n${content}\n\n`;
-    
-    if (currentLength + resultText.length > config.maxContextLength) {
-      break;
-    }
-    
+    const chapter = meta.chapter || (result as any).source?.chapter || 'Unknown';
+    const resultText = `[Source: Nelson Ch. ${chapter}]\n${content}\n\n`;
+
+    if (currentLength + resultText.length > config.maxContextLength) break;
+
     context += resultText;
     currentLength += resultText.length;
   }
@@ -234,6 +278,7 @@ export async function searchDrugInformation(
   } = {}
 ): Promise<any[]> {
   try {
+    const { searchDrugDosages } = await import('./mongodb');
     return await searchDrugDosages(drugQuery, options);
   } catch (error) {
     console.error('Drug search error:', error);
