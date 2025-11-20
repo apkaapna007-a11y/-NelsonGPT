@@ -21,14 +21,12 @@ function App() {
   const currentScreen = useCurrentScreen();
   const preferences = usePreferences();
   const { 
-    showSettings, 
     showCitationModal, 
     selectedCitation, 
     isOnline,
     showInstallPrompt,
     setCurrentScreen,
-    hideCitationModal,
-    toggleSettings 
+    hideCitationModal
   } = useChatStore();
 
   // Initialize app and handle splash screen timing
@@ -42,53 +40,50 @@ function App() {
     return () => clearTimeout(timer);
   }, [currentScreen, setCurrentScreen]);
 
-  // Apply theme preferences
+  // Apply theme and appearance preferences
   useEffect(() => {
     const root = document.documentElement;
-    
-    // Apply theme
-    if (preferences.theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
+
+    const applyTheme = () => {
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const useDark = preferences.theme === 'dark' || (preferences.theme === 'system' && prefersDark);
+      root.classList.toggle('dark', useDark);
+    };
+
+    applyTheme();
+
+    let mql: MediaQueryList | null = null;
+    let handler: ((this: MediaQueryList, ev: MediaQueryListEvent) => any) | null = null;
+    if (preferences.theme === 'system' && window.matchMedia) {
+      mql = window.matchMedia('(prefers-color-scheme: dark)');
+      handler = () => applyTheme();
+      mql.addEventListener ? mql.addEventListener('change', handler) : mql.addListener(handler as any);
     }
 
-    // Apply font size
     const fontSizeMap = {
       small: '14px',
       medium: '16px',
       large: '18px'
-    };
+    } as const;
     root.style.fontSize = fontSizeMap[preferences.fontSize];
 
-    // Apply color palette
     const colorPalettes = {
-      amber: {
-        primary: '#F59E0B',
-        primaryLight: '#FEF3C7',
-        primaryDark: '#D97706'
-      },
-      blue: {
-        primary: '#3B82F6',
-        primaryLight: '#DBEAFE',
-        primaryDark: '#1D4ED8'
-      },
-      orange: {
-        primary: '#F97316',
-        primaryLight: '#FED7AA',
-        primaryDark: '#EA580C'
-      },
-      gray: {
-        primary: '#6B7280',
-        primaryLight: '#F3F4F6',
-        primaryDark: '#374151'
-      }
-    };
+      amber: { primary: '#F59E0B', primaryLight: '#FEF3C7', primaryDark: '#D97706' },
+      blue: { primary: '#3B82F6', primaryLight: '#DBEAFE', primaryDark: '#1D4ED8' },
+      orange: { primary: '#F97316', primaryLight: '#FED7AA', primaryDark: '#EA580C' },
+      gray: { primary: '#6B7280', primaryLight: '#F3F4F6', primaryDark: '#374151' }
+    } as const;
 
     const palette = colorPalettes[preferences.colorPalette];
     root.style.setProperty('--color-primary', palette.primary);
     root.style.setProperty('--color-primary-light', palette.primaryLight);
     root.style.setProperty('--color-primary-dark', palette.primaryDark);
+
+    return () => {
+      if (mql && handler) {
+        mql.removeEventListener ? mql.removeEventListener('change', handler) : (mql as any).removeListener(handler as any);
+      }
+    };
   }, [preferences]);
 
   const renderCurrentScreen = () => {
@@ -139,15 +134,7 @@ function App() {
         <Navigation />
       )}
 
-      {/* Settings Panel Overlay */}
-      <AnimatePresence>
-        {showSettings && (
-          <SettingsPanel 
-            isOpen={showSettings} 
-            onClose={toggleSettings} 
-          />
-        )}
-      </AnimatePresence>
+
 
       {/* Citation Modal */}
       <AnimatePresence>
