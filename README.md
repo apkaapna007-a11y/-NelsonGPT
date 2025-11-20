@@ -210,8 +210,8 @@ Set `VITE_DEV_MODE=true` in your `.env` for detailed logging.
 ## 📚 Documentation
 
 - [Backend Setup Guide](backend/README.md) - MongoDB Atlas vector search setup
-- [API Documentation](docs/api.md) - Detailed API integration guide
-- [Deployment Guide](docs/deployment.md) - Production deployment instructions
+- API Documentation: coming soon
+- Deployment Guide: coming soon
 
 ## 🤝 Contributing
 
