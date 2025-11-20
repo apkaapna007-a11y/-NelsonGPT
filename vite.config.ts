@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon-192.png', 'icon-512.png', 'manifest.json'],
+      includeAssets: ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'manifest.json'],
       manifest: {
         name: 'Nelson-GPT',
         short_name: 'Nelson-GPT',
