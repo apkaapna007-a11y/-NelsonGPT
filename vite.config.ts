@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['icon-192.png', 'icon-512.png', 'manifest.json'],
       manifest: {
         name: 'Nelson-GPT',
         short_name: 'Nelson-GPT',
@@ -36,7 +36,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/api\.supabase\.co\/.*/i,
+            urlPattern: /^https:\/\/[a-z0-9.-]+\.supabase\.co\/.*$/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'supabase-cache',
